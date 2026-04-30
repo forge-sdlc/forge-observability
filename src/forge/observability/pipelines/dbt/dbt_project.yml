@@ -1,0 +1,18 @@
+name: forge_observability
+version: 0.1.0
+profile: forge_observability
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+models:
+  forge_observability:
+    staging:
+      +materialized: view
+    silver:
+      +materialized: view
+
+vars:
+  # Overridden at runtime by the dlt dbt runner in worker.py.
+  # Lists which bronze source names have been successfully loaded.
+  available_sources: []
