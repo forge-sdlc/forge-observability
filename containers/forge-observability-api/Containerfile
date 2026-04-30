@@ -1,0 +1,56 @@
+# forge-observability-api
+#
+# Standalone FastAPI service that exposes observability endpoints.
+#
+# Start external datastore first:
+# e.g., ClickHouse
+#   podman compose -f devtools/compose.clickhouse.yml up -d
+#
+# Build (from repo root):
+#   podman build -t forge-observability-api:latest \
+#       -f containers/forge-observability-api/Containerfile .
+#
+# Run:
+#   podman run --env-file .env --rm -d -p 8010:8010 --name forge-observability-api \
+#       forge-observability-api:latest
+#
+# Default container port: 8010  (override with OBSERVABILITY_API_PORT env var)
+
+FROM python:3.13-slim
+
+LABEL org.opencontainers.image.title="Forge Observability API"
+LABEL org.opencontainers.image.description="HTTP API for Forge Observability"
+
+# Only for setting container metadata
+ARG PORT=8010
+
+# curl — healthcheck
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# ── Dependency layer (cached until pyproject.toml / uv.lock change) ────────
+COPY pyproject.toml uv.lock ./
+RUN touch README.md && uv sync --frozen --no-dev --no-install-project
+
+# ── Application code ──────────────────────────────────────────────────────
+COPY src/ ./src/
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+RUN useradd --create-home --shell /bin/bash --uid 1001 forge \
+    && chown -R forge:forge /app
+
+USER forge
+
+EXPOSE ${PORT}
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:8010/health || exit 1
+
+CMD ["forge", "observability", "serve", "--host", "0.0.0.0"]

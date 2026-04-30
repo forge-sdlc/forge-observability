@@ -1,0 +1,47 @@
+# Datastore — ephemeral ClickHouse for local development
+#
+# Usage:
+#   podman compose -f devtools/compose.clickhouse.yml up -d
+#
+# SQL shell:
+#   podman compose -f devtools/compose.clickhouse.yml exec clickhouse \
+#     clickhouse-client --user forge --password forge
+#
+# HTTP interface:  http://localhost:8123
+# Native port:     localhost:9000
+#
+# Tear down (wipes all data):
+#   podman compose -f devtools/compose.clickhouse.yml down -v
+name: external-datastore
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native protocol
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: forge
+      CLICKHOUSE_PASSWORD: forge
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "clickhouse-client --user forge --password forge --query 'SELECT 1'"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - external_datastore
+
+volumes:
+  clickhouse_data:
+    name: forge_observability_clickhouse_data
+
+networks:
+  external_datastore:
+    name: forge_observability_external_datastore
