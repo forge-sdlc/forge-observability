@@ -88,6 +88,7 @@ services:
 
       FORGE_OBSERVABILITY_WORKER_LOG_LEVEL: ${FORGE_OBSERVABILITY_WORKER_LOG_LEVEL:-INFO}
       FORGE_OBSERVABILITY_WORKER_SKIP_DBT: ${FORGE_OBSERVABILITY_WORKER_SKIP_DBT:-false}
+      FORGE_OBSERVABILITY_DLT_PIPELINES_DIR: /home/forge/.dlt/pipelines
     volumes:
       # Persist dlt pipeline state across container restarts
       - worker_state:/home/forge/.dlt

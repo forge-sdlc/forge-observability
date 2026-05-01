@@ -22,7 +22,8 @@ build/
 *.swp
 
 # dlt
-.dlt/
+.dlt/*
+!.dlt/config.toml
 
 # dbt
 .dbt/*

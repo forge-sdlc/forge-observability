@@ -5,6 +5,7 @@ No dependency on the forge package.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     # ── Forge Observability Worker ────────────────────────────────────────
     forge_observability_worker_log_level: str = Field(default="INFO")
     forge_observability_worker_skip_dbt: bool = Field(default=False)
+    # Where dlt writes pipeline state. Unset = repo-root .dlt/pipelines (local dev).
+    # Containers set this to /home/forge/.dlt/pipelines via compose.
+    forge_observability_dlt_pipelines_dir: Path | None = Field(default=None)
 
     # ── Langfuse ──────────────────────────────────────────────────────────
     langfuse_host: str = Field(default="localhost")

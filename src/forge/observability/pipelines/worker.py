@@ -18,6 +18,7 @@ _DBT_PROJECT = Path(__file__).parent / "dbt"
 _REPO_ROOT = Path(__file__).parents[4]
 _DBT_TARGET = _REPO_ROOT / ".dbt" / "target"
 _DBT_LOGS = _REPO_ROOT / ".dbt" / "logs"
+_DLT_PIPELINES_DIR = _REPO_ROOT / ".dlt" / "pipelines"
 
 # dlt uses CREATE TABLE (not IF NOT EXISTS) for the bronze dataset sentinel table.
 # On a fresh datastore, all pipelines race to create it simultaneously. This lock
@@ -42,10 +43,13 @@ def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
     creds.password = s.clickhouse_password.get_secret_value()
     creds.secure = 0
 
+    pipelines_dir = s.forge_observability_dlt_pipelines_dir or _DLT_PIPELINES_DIR
+
     return dlt.pipeline(
         pipeline_name=name,
         destination=dlt.destinations.clickhouse(credentials=creds),
         dataset_name=dataset_name,
+        pipelines_dir=pipelines_dir,
     )
 
 
