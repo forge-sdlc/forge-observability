@@ -84,6 +84,7 @@ All settings are read from environment variables or a `.env` file. See `.env.exa
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FORGE_OBSERVABILITY_WORKER_LOG_LEVEL` | `INFO` | Log level |
+| `FORGE_OBSERVABILITY_WORKER_SKIP_DBT` | `false` | Skip dbt silver/gold rebuilds — useful when iterating on dbt models and invoking dbt directly |
 
 ### Langfuse *(disabled if credentials absent)*
 
@@ -169,14 +170,17 @@ forge observability serve [--host HOST] [--port PORT] [--reload]
 Run all configured dlt pipelines, then rebuild silver/gold views with dbt.
 
 ```
-forge observability worker [--once]
+forge observability worker [--once] [--skip-dbt]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--once` | off | Run each pipeline once then exit (useful for backfill) |
+| `--skip-dbt` | off | Run source pipelines only — skip dbt silver/gold rebuilds |
 
 Without `--once`, pipelines loop on their configured `*_INTERVAL_SECONDS` and dbt rebuilds silver views after each pipeline round completes.
+
+`--skip-dbt` is intended for local dbt development: keep the worker running so fresh bronze data continues to flow in, then invoke `dbt run` directly as you iterate on models. The flag takes precedence over the `FORGE_OBSERVABILITY_WORKER_SKIP_DBT` environment variable.
 
 ## API reference
 
@@ -272,4 +276,4 @@ dbt test
 dbt docs generate && dbt docs serve
 ```
 
-The worker (`forge observability worker`) runs `dbt run` automatically after each pipeline round — direct `dbt` invocation is for development and debugging only.
+The worker (`forge observability worker`) runs `dbt run` automatically after each pipeline round. To iterate on dbt models while keeping bronze data flowing, start the worker with `--skip-dbt` (or set `FORGE_OBSERVABILITY_WORKER_SKIP_DBT=true`) and invoke `dbt run` directly.

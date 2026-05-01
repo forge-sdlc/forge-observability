@@ -27,6 +27,13 @@ uv run forge observability serve --host "0.0.0.0" --port 8010
 uv run forge observability worker
 uv run forge observability worker --once
 
+# Run source pipelines only — skip dbt silver/gold rebuilds.
+# Useful when iterating on dbt models and invoking dbt directly.
+uv run forge observability worker --skip-dbt
+uv run forge observability worker --once --skip-dbt
+# Equivalent via env var (also respected by compose.dev.yml):
+# FORGE_OBSERVABILITY_WORKER_SKIP_DBT=true
+
 # Start dev datastore (e.g., ClickHouse)
 podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 

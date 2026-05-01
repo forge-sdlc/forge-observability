@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # ── Forge Observability Worker ────────────────────────────────────────
     forge_observability_worker_log_level: str = Field(default="INFO")
+    forge_observability_worker_skip_dbt: bool = Field(default=False)
 
     # ── Langfuse ──────────────────────────────────────────────────────────
     langfuse_host: str = Field(default="localhost")

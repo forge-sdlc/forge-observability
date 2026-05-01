@@ -207,11 +207,12 @@ async def _run_dbt(pipeline_names: frozenset[str], done_queue: asyncio.Queue) ->
             logger.exception("dbt run failed")
 
 
-async def _run_pipelines(once: bool = False) -> None:
+async def _run_pipelines(once: bool = False, skip_dbt: bool = False) -> None:
     """Run all configured analytics pipelines concurrently, then rebuild silver views with dbt.
 
     Args:
         once: Run each pipeline once and exit (useful for backfill / testing).
+        skip_dbt: Skip dbt silver/gold rebuilds (useful for iterating on dbt models locally).
     """
     s = get_settings()
     pipelines: list[tuple[str, Callable, int]] = []
@@ -242,16 +243,21 @@ async def _run_pipelines(once: bool = False) -> None:
 
     if once:
         await asyncio.gather(*[_load_pipeline(name, factory) for name, factory, _ in pipelines])
-        available = await asyncio.to_thread(_get_available_sources)
-        logger.info(f"dbt run — available sources: {available}")
-        await asyncio.to_thread(_load_dbt, available)
+        if not skip_dbt:
+            available = await asyncio.to_thread(_get_available_sources)
+            logger.info(f"dbt run — available sources: {available}")
+            await asyncio.to_thread(_load_dbt, available)
+        else:
+            logger.info("Skipping dbt run (--skip-dbt)")
     else:
         done_queue: asyncio.Queue[str] = asyncio.Queue()
         pipeline_names = frozenset(name for name, _, _ in pipelines)
-        await asyncio.gather(
-            *[
-                _run_pipeline_loop(name, factory, interval, done_queue)
-                for name, factory, interval in pipelines
-            ],
-            _run_dbt(pipeline_names, done_queue),
-        )
+        tasks = [
+            _run_pipeline_loop(name, factory, interval, done_queue)
+            for name, factory, interval in pipelines
+        ]
+        if not skip_dbt:
+            tasks.append(_run_dbt(pipeline_names, done_queue))
+        else:
+            logger.info("Skipping dbt runs (--skip-dbt)")
+        await asyncio.gather(*tasks)

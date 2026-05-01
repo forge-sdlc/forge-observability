@@ -18,6 +18,11 @@ def _add_observability_subcommands(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Run each pipeline once and exit (useful for backfill)",
     )
+    worker_parser.add_argument(
+        "--skip-dbt",
+        action="store_true",
+        help="Run source pipelines only — skip dbt silver/gold rebuilds (useful for iterating on dbt models)",
+    )
     serve_parser = subparsers.add_parser(
         "serve",
         help="Start the forge observability API server",
@@ -33,7 +38,11 @@ def _dispatch(args: argparse.Namespace) -> int:
     if command == "worker":
         from forge.observability.pipelines.worker import _run_pipelines
 
-        asyncio.run(_run_pipelines(once=args.once))
+        from forge.observability.config import get_settings
+
+        s = get_settings()
+        skip_dbt = args.skip_dbt or s.forge_observability_worker_skip_dbt
+        asyncio.run(_run_pipelines(once=args.once, skip_dbt=skip_dbt))
         return 0
 
     if command == "serve":

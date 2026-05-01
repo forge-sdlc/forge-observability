@@ -87,6 +87,7 @@ services:
       JIRA_INTERVAL_SECONDS: ${JIRA_INTERVAL_SECONDS:-600}
 
       FORGE_OBSERVABILITY_WORKER_LOG_LEVEL: ${FORGE_OBSERVABILITY_WORKER_LOG_LEVEL:-INFO}
+      FORGE_OBSERVABILITY_WORKER_SKIP_DBT: ${FORGE_OBSERVABILITY_WORKER_SKIP_DBT:-false}
     volumes:
       # Persist dlt pipeline state across container restarts
       - worker_state:/home/forge/.dlt

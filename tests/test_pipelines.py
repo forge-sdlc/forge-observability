@@ -1,9 +1,76 @@
 """Tests for pure pipeline helper functions — no network, no ClickHouse."""
 
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from forge.observability.pipelines.github_pipeline import _extract_ticket_key
 from forge.observability.pipelines.jira_pipeline import _classify_interaction
+
+
+def _make_settings(**overrides):
+    """Minimal settings mock with only prometheus enabled (always-on source)."""
+    s = MagicMock()
+    s.prometheus_enabled = True
+    s.langfuse_enabled = False
+    s.github_enabled = False
+    s.jira_enabled = False
+    s.prometheus_interval_seconds = 60
+    for k, v in overrides.items():
+        setattr(s, k, v)
+    return s
+
+
+class TestSkipDbtFlag:
+    @pytest.fixture(autouse=True)
+    def _patch_worker_deps(self):
+        """Patch all I/O in worker so no ClickHouse or network is needed."""
+        with (
+            patch(
+                "forge.observability.pipelines.worker.get_settings",
+                return_value=_make_settings(),
+            ),
+            patch(
+                "forge.observability.pipelines.worker._load_pipeline",
+                new_callable=AsyncMock,
+            ) as mock_load,
+            patch("forge.observability.pipelines.worker._load_dbt") as mock_dbt,
+            patch(
+                "forge.observability.pipelines.worker._get_available_sources",
+                return_value=[],
+            ),
+        ):
+            self.mock_load = mock_load
+            self.mock_dbt = mock_dbt
+            yield
+
+    async def test_once_skip_dbt_does_not_call_dbt(self):
+        from forge.observability.pipelines.worker import _run_pipelines
+
+        await _run_pipelines(once=True, skip_dbt=True)
+
+        self.mock_load.assert_called_once()
+        self.mock_dbt.assert_not_called()
+
+    async def test_once_without_skip_dbt_calls_dbt(self):
+        from forge.observability.pipelines.worker import _run_pipelines
+
+        await _run_pipelines(once=True, skip_dbt=False)
+
+        self.mock_load.assert_called_once()
+        self.mock_dbt.assert_called_once()
+
+    async def test_continuous_skip_dbt_does_not_call_dbt(self):
+        from forge.observability.pipelines.worker import _run_pipelines
+
+        task = asyncio.create_task(_run_pipelines(once=False, skip_dbt=True))
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        self.mock_dbt.assert_not_called()
 
 
 class TestExtractTicketKey:
