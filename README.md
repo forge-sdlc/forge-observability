@@ -233,3 +233,43 @@ uv run ruff format src/ tests/
 ```
 
 Tests use a mocked `Repository` and FastAPI's `TestClient` — no live datastore needed.
+
+### dbt
+
+The dbt project lives at `src/forge/observability/pipelines/dbt/`. It builds the silver and gold views in the target datastore from the bronze tables loaded by dlt.
+
+**Profile setup** — `dbt` reads credentials from `.dbt/profiles.yml` at the workspace root. This file is committed and pre-configured for the example ClickHouse dev container (`localhost:8123`, user `forge`, password `forge`). Compiled artifacts and logs are also written to `.dbt/`.
+
+**Environment variables** — `profiles.yml` reads ClickHouse credentials via `env_var()`, which pulls from the shell environment. Unlike `forge observability worker`, the `dbt` CLI does not load `.env` automatically. Source it before running any `dbt` command locally:
+
+```bash
+set -a && source .env && set +a
+```
+
+VSCode users: the dbt Power User extension picks up the profile and project paths automatically via `.vscode/settings.json`.
+
+```bash
+# First-time setup: install declared packages into .dbt/dbt_packages/
+dbt deps
+
+# Verify profile and datastore connectivity
+dbt debug
+
+# Compile models without executing (useful for syntax checking)
+dbt compile
+
+# Build all silver and gold views
+dbt run
+
+# Build a single layer
+dbt run --select silver
+dbt run --select gold
+
+# Run schema and data tests
+dbt test
+
+# Browse auto-generated docs
+dbt docs generate && dbt docs serve
+```
+
+The worker (`forge observability worker`) runs `dbt run` automatically after each pipeline round — direct `dbt` invocation is for development and debugging only.

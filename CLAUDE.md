@@ -33,6 +33,24 @@ podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 # Start Forge Observability Stack (API + worker)
 podman compose --env-file .env -f devtools/compose.dev.yml up -d
 
+# dbt — run from the dbt project directory
+# Profiles are read from .dbt/profiles.yml (workspace root); artifacts write to .dbt/
+#
+# profiles.yml uses env_var() for ClickHouse credentials. The dbt CLI does not
+# load .env automatically — source it first when running dbt outside a container:
+set -a && source .env && set +a
+
+dbt deps                     # install packages declared in dependencies.yml → .dbt/
+dbt debug                    # verify profile + datastore connectivity
+
+dbt_packages/
+dbt compile                  # parse and compile models without executing
+dbt run                      # build all silver/gold views in ClickHouse
+dbt run --select silver      # build only the silver layer
+dbt run --select gold        # build only the gold layer
+dbt test                     # run schema + data tests defined in models/
+dbt docs generate            # generate docs site
+dbt docs serve               # serve docs locally (default port 8080)
 ```
 
 ## Architecture
