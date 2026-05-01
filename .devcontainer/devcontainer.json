@@ -4,9 +4,9 @@
   "remoteUser": "root",
   // Start datastore on the host before the devcontainer launches so the
   // e.g., ClickHouse
-  "initializeCommand": "podman compose -f devtools/compose.clickhouse.yml up -d",
+  "initializeCommand": "podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d",
   // Install uv and sync dependencies once after container creation.
-  "onCreateCommand": "python -m venv .venv && .venv/bin/pip install uv && .venv/bin/uv sync",
+  "onCreateCommand": "pipx install uv && uv sync",
   // Join the same Docker network as ClickHouse so we can reach it by
   // its service name ("clickhouse") rather than localhost.
   "runArgs": [

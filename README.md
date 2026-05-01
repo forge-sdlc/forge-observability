@@ -39,7 +39,7 @@ uv sync
 
 # Start external datastore
 # e.g., Clickhouse
-podman compose -f devtools/compose.clickhouse.yml up -d
+podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 
 # Configure
 cp .env.example .env
@@ -127,13 +127,13 @@ All settings are read from environment variables or a `.env` file. See `.env.exa
 
 ```bash
 # External Datastore (run first)
-podman compose -f devtools/compose.clickhouse.yml up -d
+podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 
 # API + worker
-podman compose -f devtools/compose.dev.yml up -d
+podman compose --env-file .env -f devtools/compose.dev.yml up -d
 
 # Tail logs
-podman compose -f devtools/compose.dev.yml logs -f
+podman compose --env-file .env -f devtools/compose.dev.yml logs -f
 ```
 
 The API is available at `http://localhost:8010`. dlt pipeline state is persisted in a named volume (`pipeline_state`) mounted at `/home/forge/.dlt`.

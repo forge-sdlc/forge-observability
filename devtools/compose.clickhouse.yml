@@ -1,10 +1,10 @@
 # Datastore — ephemeral ClickHouse for local development
 #
 # Usage:
-#   podman compose -f devtools/compose.clickhouse.yml up -d
+#   podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 #
 # SQL shell:
-#   podman compose -f devtools/compose.clickhouse.yml exec clickhouse \
+#   podman compose --env-file .env -f devtools/compose.clickhouse.yml exec clickhouse \
 #     clickhouse-client --user forge --password forge
 #
 # HTTP interface:  http://localhost:8123

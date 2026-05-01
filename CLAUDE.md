@@ -28,10 +28,10 @@ uv run forge observability worker
 uv run forge observability worker --once
 
 # Start dev datastore (e.g., ClickHouse)
-podman compose -f devtools/compose.clickhouse.yml up -d
+podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 
 # Start Forge Observability Stack (API + worker)
-podman compose -f devtools/compose.dev.yml up -d
+podman compose --env-file .env -f devtools/compose.dev.yml up -d
 
 ```
 

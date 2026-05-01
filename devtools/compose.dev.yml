@@ -2,7 +2,7 @@
 #
 # Start external datastore first:
 # e.g., ClickHouse
-#   podman compose -f devtools/compose.clickhouse.yml up -d
+#   podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
 #
 # Then start the observability stack:
 #   podman compose --env-file .env -f devtools/compose.dev.yml up -d
