@@ -26,16 +26,6 @@ _dataset_initialized = False
 _dataset_init_lock: asyncio.Lock | None = None
 
 
-# Maps logical source names (dbt vars) to their physical bronze table names
-_SOURCE_TABLE_MAP = {
-    "llm_traces": "bronze___llm_traces",
-    "jira_tickets": "bronze___jira_tickets",
-    "pull_requests": "bronze___pull_requests",
-    "human_interactions": "bronze___human_interactions",
-    "ci_checks": "bronze___ci_checks",
-}
-
-
 def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
     """Create a dlt pipeline targeting the configured datastore."""
     # TODO: Configure for different backends
@@ -59,13 +49,26 @@ def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
     )
 
 
+def _read_source_tables() -> dict[str, str]:
+    """Return logical→physical table mapping from sources.yml."""
+    import yaml
+
+    sources_yml = _DBT_PROJECT / "models" / "sources.yml"
+    doc = yaml.safe_load(sources_yml.read_text())
+    result = {}
+    for source in doc.get("sources", []):
+        for table in source.get("tables", []):
+            result[table["name"]] = table.get("identifier", table["name"])
+    return result
+
+
 def _get_available_sources() -> list[str]:
     """Return source names whose bronze tables actually exist in datastore."""
     from forge.observability.repository.repository import _get_engine
 
     engine = _get_engine()
     available = []
-    for source, table in _SOURCE_TABLE_MAP.items():
+    for source, table in _read_source_tables().items():
         try:
             with engine.connect() as conn:
                 conn.execute(text(f"SELECT 1 FROM {table} LIMIT 1"))
@@ -73,39 +76,6 @@ def _get_available_sources() -> list[str]:
         except Exception:
             pass
     return available
-
-
-def _write_sources_yml() -> None:
-    """Write dbt sources.yml from the known bronze source mappings.
-
-    Uses _SOURCE_TABLE_MAP rather than querying system.tables so internal dlt
-    housekeeping tables are never included. Models that reference unavailable
-    sources are disabled via config(enabled=is_source_available(...)) in the
-    model SQL, so listing all known sources here is always safe.
-    """
-    import yaml
-
-    s = get_settings()
-
-    # TODO: Configure different backends
-    sources_doc = {
-        "version": 2,
-        "sources": [
-            {
-                "name": "bronze",
-                "database": s.clickhouse_database,
-                "schema": s.clickhouse_database,
-                "tables": [
-                    {"name": logical, "identifier": physical}
-                    for logical, physical in sorted(_SOURCE_TABLE_MAP.items())
-                ],
-            }
-        ],
-    }
-
-    out = _DBT_PROJECT / "models" / "sources.yml"
-    out.write_text(yaml.dump(sources_doc, default_flow_style=False, sort_keys=False))
-    logger.info(f"Generated sources.yml with {len(_SOURCE_TABLE_MAP)} bronze source mappings")
 
 
 def _load_dbt(available_sources: list[str]) -> None:
@@ -119,8 +89,6 @@ def _load_dbt(available_sources: list[str]) -> None:
     os.environ["DBT_TARGET_PATH"] = str(_DBT_TARGET)
     os.environ["DBT_LOG_PATH"] = str(_DBT_LOGS)
     os.environ["DBT_PACKAGES_INSTALL_PATH"] = str(_dbt_packages)
-
-    _write_sources_yml()
 
     # TODO: Configure different backends
     s = get_settings()

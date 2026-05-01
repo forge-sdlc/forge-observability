@@ -17,16 +17,16 @@ build/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.swp
 
 # dlt
 .dlt/
 
 # dbt
-.dbt/
-dbt.log
-sources.yml
+.dbt/*
+!.dbt/profiles.yml
 
 # macOS
 .DS_Store

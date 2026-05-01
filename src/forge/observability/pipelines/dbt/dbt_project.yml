@@ -4,6 +4,7 @@ profile: forge_observability
 
 model-paths: ["models"]
 macro-paths: ["macros"]
+packages-install-path: "../../../../../.dbt/dbt_packages"
 
 models:
   forge_observability:
@@ -13,6 +14,10 @@ models:
       +materialized: view
 
 vars:
-  # Overridden at runtime by the dlt dbt runner in worker.py.
-  # Lists which bronze source names have been successfully loaded.
-  available_sources: []
+  # Lists which bronze source names are available in the datastore.
+  # The worker overrides this at runtime via --vars based on actual table presence.
+  # When running dbt directly, set this to match what's loaded in your datastore.
+  available_sources:
+    - human_interactions
+    - jira_tickets
+    - llm_traces
