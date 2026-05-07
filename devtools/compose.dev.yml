@@ -1,4 +1,4 @@
-# Forge Observability Stack — API + Pipeline Runner
+# Forge Observability Stack — Pipeline Runner
 #
 # Start external datastore first:
 # e.g., ClickHouse
@@ -12,36 +12,6 @@
 name: forge-observability
 
 services:
-
-  # ── forge-observability-api ────────────────────────────────────────────
-  # HTTP service that exposes observability endpoints.
-  forge-observability-api:
-    image: localhost/forge-observability-api:latest
-    build:
-      context: ..
-      dockerfile: containers/forge-observability-api/Containerfile
-    restart: unless-stopped
-    ports:
-      - "8010:8010"
-    environment:
-      # ── External Datastore ──────────────────────────────────────────────
-      # When running with compose.clickhouse.yml
-      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-host.containers.internal}
-      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-9000}
-      CLICKHOUSE_HTTP_PORT: ${CLICKHOUSE_HTTP_PORT:-8123}
-      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-default}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-forge}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-forge}
-
-      FORGE_OBSERVABILITY_API_LOG_LEVEL: ${FORGE_OBSERVABILITY_API_LOG_LEVEL:-INFO}
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8010/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      start_period: 10s
-      retries: 3
-    networks:
-      - forge_observability
 
   # ── forge-observability-worker ─────────────────────────────────────────────
   # Background worker that runs all dlt pipelines using their configured intervals.
@@ -67,31 +37,14 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
 
-      # ── Prometheus ─────────────────────────────────────────────────────
-      PROMETHEUS_HOST: ${PROMETHEUS_HOST:-host.containers.internal}
-      PROMETHEUS_PORT: ${PROMETHEUS_PORT:-9092}
-
-      # ── GitHub ─────────────────────────────────────────────────────────
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      GITHUB_KNOWN_REPOS: ${GITHUB_KNOWN_REPOS:-}
-
-      # ── JIRA ───────────────────────────────────────────────────────────
-      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
-      JIRA_USER_EMAIL: ${JIRA_USER_EMAIL:-}
-      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
-
-      # ── Pipeline intervals ────────────────────────────
+      # ── Pipeline intervals ────────────────────────────────────────────
       LANGFUSE_INTERVAL_SECONDS: ${LANGFUSE_INTERVAL_SECONDS:-60}
-      PROMETHEUS_INTERVAL_SECONDS: ${PROMETHEUS_INTERVAL_SECONDS:-300}
-      GITHUB_INTERVAL_SECONDS: ${GITHUB_INTERVAL_SECONDS:-600}
-      JIRA_INTERVAL_SECONDS: ${JIRA_INTERVAL_SECONDS:-600}
 
       FORGE_OBSERVABILITY_WORKER_LOG_LEVEL: ${FORGE_OBSERVABILITY_WORKER_LOG_LEVEL:-INFO}
       FORGE_OBSERVABILITY_WORKER_SKIP_DBT: ${FORGE_OBSERVABILITY_WORKER_SKIP_DBT:-false}
-      FORGE_OBSERVABILITY_DLT_PIPELINES_DIR: /home/forge/.dlt/pipelines
     volumes:
-      # Persist dlt pipeline state across container restarts
-      - worker_state:/home/forge/.dlt
+      # Persist dlt and dbt state across container restarts
+      - worker_state:/app/state
     networks:
       - forge_observability
 

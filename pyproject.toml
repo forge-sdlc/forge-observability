@@ -7,19 +7,13 @@ name = "forge-observability"
 version = "0.1.0"
 description = "Analytics and observability plugin for Forge SDLC Orchestrator"
 readme = "README.md"
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.11, <3.14"
 dependencies = [
-    # Analytics API
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "httpx>=0.27.0",
     # ClickHouse
     "clickhouse-connect>=0.8.0",
     "dlt[clickhouse]>=1.4.0",
     # Source integrations
     "langfuse>=2.50.0",
-    # Database abstraction
-    "sqlalchemy>=2.0.0",
     # dbt for silver/gold layer transformations
     "dbt-clickhouse>=1.8.0",
     # Config
@@ -29,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-forge = "forge.observability.cli:main"
+forge-observability = "forge.observability.cli:main"
 
 [project.optional-dependencies]
 dev = [

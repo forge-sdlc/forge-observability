@@ -1,0 +1,11 @@
+version: 2
+sources:
+- name: bronze
+  database: default
+  tables:
+  - name: llm_traces
+    identifier: bronze___llm_traces
+  - name: llm_observations
+    identifier: bronze___llm_traces
+  - name: llm_scores
+    identifier: bronze___llm_traces

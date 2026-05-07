@@ -22,12 +22,12 @@ build/
 *.swp
 
 # dlt
-.dlt/*
-!.dlt/config.toml
+state/.dlt/*
+!state/.dlt/config.toml
 
 # dbt
-.dbt/*
-!.dbt/profiles.yml
+state/.dbt/*
+!state/.dbt/profiles.yml
 
 # macOS
 .DS_Store

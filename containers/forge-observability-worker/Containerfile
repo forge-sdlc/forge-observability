@@ -1,7 +1,7 @@
 # forge-observability-worker
 #
 # Long-running background worker that executes dlt pipelines on a schedule,
-# pulling data from Langfuse, Prometheus, GitHub, and JIRA into ClickHouse.
+# pulling data from Langfuse into ClickHouse.
 #
 # Start external datastore first:
 # e.g., ClickHouse
@@ -15,25 +15,22 @@
 #   podman volume create forge_observability_worker_state
 #
 #   podman run --env-file .env --rm -d --name forge-observability-worker \
-#       -v forge_observability_worker_state:/home/forge/.dlt \
+#       -v forge_observability_worker_state:/app/state \
 #       forge-observability-worker:latest
 #
 # Run once (backfill):
 #   podman run --env-file .env --rm -d --name forge-observability-worker \
-#       -v forge_observability_worker_state:/home/forge/.dlt \
+#       -v forge_observability_worker_state:/app/state \
 #       forge-observability-worker:latest \
-#       forge observability worker --once
+#       forge-observability worker --once
 #
 # Pipeline intervals (env vars):
 #   LANGFUSE_INTERVAL_SECONDS    (default: 60  — LLM traces)
-#   PROMETHEUS_INTERVAL_SECONDS  (default: 300 — app metrics)
-#   GITHUB_INTERVAL_SECONDS      (default: 600 — PRs / CI)
-#   JIRA_INTERVAL_SECONDS        (default: 600 — tickets)
 
 FROM python:3.13-slim
 
 LABEL org.opencontainers.image.title="Forge Observability Worker"
-LABEL org.opencontainers.image.description="Worker running dlt pipelines against Langfuse, Prometheus, GitHub, and JIRA"
+LABEL org.opencontainers.image.description="Worker running dlt pipelines"
 
 #  git is strongly recommended for for tracking changes to data pipelines
 RUN apt-get update \
@@ -54,11 +51,13 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-# dlt stores pipeline state under ~/.dlt; mount a volume here for persistence
-# across restarts: -v pipeline-state:/home/forge/.dlt
+# Pre-create state directory so dlt and dbt can write on first run.
+# dbt_project.yml paths resolve relative to the project file, landing in /app/state/.dbt/.
+# Mount a volume at /app/state to persist both dlt and dbt state across container restarts.
 RUN useradd --create-home --shell /bin/bash --uid 1001 forge \
+    && mkdir -p /app/state \
     && chown -R forge:forge /app
 
 USER forge
 
-CMD ["forge", "observability", "worker"]
+CMD ["forge-observability", "worker"]

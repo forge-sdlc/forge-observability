@@ -13,14 +13,6 @@
     "--env-file",
     "${localWorkspaceFolder}/.env"
   ],
-  "forwardPorts": [
-    8010
-  ],
-  "portsAttributes": {
-    "8010": {
-      "label": "Forge Observability API"
-    }
-  },
   "customizations": {
     "vscode": {
       "extensions": [
