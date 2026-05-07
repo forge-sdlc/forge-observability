@@ -3,16 +3,15 @@
 ## Executive Summary
 
 This document describes the analytics subsystem for forge-observability. It uses
-[dlt (data load tool)](https://dlthub.com/docs/intro) to extract data from Langfuse,
-Prometheus, GitHub, and JIRA, load it into an external datastore, transform it using [dbt (data build tool)](https://www.getdbt.com/blog/what-exactly-is-dbt)and expose it through a
-FastAPI Analytics API.
+[dlt (data load tool)](https://dlthub.com/docs/intro) to extract data from Langfuse
+and load it into a target datastore, then transforms it using [dbt (data build tool)](https://www.getdbt.com/blog/what-exactly-is-dbt)
+to build analytics views.
 
 Data is organized using a **Medallion Architecture**:
 
-- **Bronze** — raw, per-source, denormalized tables loaded by dlt
-- **Staging** — thin dbt views that select and rename bronze columns (no joins)
-- **Silver** — cross-source joins built by dbt as datastore views
-- **Gold** — pre-aggregated KPIs (not yet implemented)
+- **Bronze** — raw, denormalized tables loaded by dlt
+- **Silver** — analytical tables built by dbt as datastore views
+- **Gold** — aggregated KPIs (placeholder, not yet implemented)
 
 Source systems remain the source of truth. The external datastore holds denormalized,
 query-ready copies.
@@ -20,89 +19,90 @@ query-ready copies.
 ## Design Principles
 
 1. **dlt as the ingestion backbone** — extraction, schema evolution, incremental
-   loading, and datasource destination management are all handled by dlt
-2. **dbt as the transformation layer** — silver/gold views are SQL models in a dbt
-   project, rebuilt on a schedule by the worker process
-3. **Graceful source degradation** — silver dbt models use `is_source_available()`
-   to omit joins for bronze tables that haven't been loaded yet
-4. **Source systems stay authoritative** — Langfuse, Prometheus, GitHub, JIRA
-   are never replaced
+   loading, and datastore destination management are all handled by dlt
+2. **dbt as the transformation layer** — views are SQL models in a dbt
+   project, rebuilt after each successful pipeline run
+3. **Graceful source degradation** — dbt models use `is_source_available()` to
+   enable themselves only when the corresponding bronze table exists in the datastore.
+   The check uses `adapter.get_relation()` — dbt queries the live database at compile
+   time rather than relying on external input
+4. **Source systems stay authoritative** — Langfuse is never replaced
 
 ## Architecture Overview
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
 │                    Data Sources (Source of Truth)                 │
-├────────────────┬────────────────┬────────────────┬────────────────┤
-│    Langfuse    │   Prometheus   │   GitHub API   │    JIRA API    │
-│  (LLM traces)  │  (app metrics) │   (PRs, CI)    │    (tickets)   │
-└───────┬────────┴───────┬────────┴───────┬────────┴───────┬────────┘
-        │                │                │                │
-        │                │ dlt pipelines  │                │
-        ▼                ▼                ▼                ▼
+├───────────────────────────────────────────────────────────────────┤
+│                           Langfuse                                │
+│                         (LLM traces)                              │
+└───────────────────────────────┬───────────────────────────────────┘
+                                │
+                                │ dlt pipeline
+                                ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │  CONTAINER: forge-observability-worker                           │
 │                                                                  │
-│  dlt bronze pipelines (run concurrently via asyncio):            │
-│    langfuse_pipeline   ──▶  bronze___llm_traces                  │
-│    prometheus_pipeline ──▶  bronze___app_metrics                 │
-│    github_pipeline     ──▶  bronze___pull_requests               │
-│                             bronze___ci_checks                   │
-│    jira_pipeline       ──▶  bronze___jira_tickets                │
-│                             bronze___human_interactions          │
+│  dlt bronze pipeline (runs on LANGFUSE_INTERVAL_SECONDS):        │
+│    langfuse_pipeline  ──▶  bronze___llm_traces                   │
+│                             bronze___llm_observations            │
+│                             bronze___llm_scores                  │
 │                                                                  │
-│  dbt (fires after each pipeline round via dlt.dbt.package):      │
-│    staging models  ──▶  stg_llm_traces, stg_jira_tickets, …      │
-│    silver models   ──▶  silver___ticket_full_view                │
+│  dbt (fires after each successful pipeline run):                 │
+│    staging models ──▶  stg_llm_traces                            │
+│    silver models  ──▶  silver___stage_performance                │
 │                         silver___ticket_llm_summary              │
-│                         silver___pr_with_llm_cost                │
-│                         silver___stage_performance               │
 │                                                                  │
 │  dlt manages: cursors, schema evolution, destination config      │
-│  dbt manages: silver/gold view definitions, source availability  │
+│  dbt manages: view definitions, source availability              │
+│                                                                  │
+│  State persisted to /app/state/ (mounted volume):                │
+│    .dlt/  — dlt pipeline state and cursors                       │
+│    .dbt/  — dbt packages, target artifacts, logs                 │
 └──────────────────────────────┬───────────────────────────────────┘
                                │
                                ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  External Analytical Datastore (e.g, ClickHouse)                 │
+│  External Analytical Datastore (ClickHouse)                      │
 │                                                                  │
 │  bronze___*   Raw per-source tables (loaded by dlt)              │
-│  silver___*   Cross-source views (built by dbt)                  │ 
-│  gold___*     Pre-aggregated KPIs (built by dbt)                 │
+│  silver___*   Analytical tables (built by dbt)                   │
+│  gold___*     aggregated KPIs (built by dbt, placeholder)        │
 │                                                                  │
-│  Table naming: triple-underscore encodes logical schema prefix.  │
-│  All tables live in one external datastore; no schema objects.   │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │
-                               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  CONTAINER: forge-observability-api (:8010)                      │
-│                                                                  │
-│  FastAPI — routes query datastore directly via SQLAlchemy        │
-│  Repository layer — SQLAlchemy Core, backend-agnostic reads      │
-│                                                                  │
-│  Aggregation queries  → silver___* views                         │
-│  Drill-down queries   → bronze___* tables                        │
+│  Table naming: triple-underscore encodes logical layer prefix.   │
+│  All tables live in one database; no schema objects.             │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Container Breakdown:**
+## dbt Source Availability
 
-| Container | Replicas | Responsibility |
-|-----------|----------|----------------|
-| **forge-observability-worker** | 1 | Runs dlt pipelines. (1-N copies as dev goal)|
-| **forge-observability-api** | 1-N | Serves HTTP API. Queries silver for aggregations, bronze for drill-downs. |
+The `is_source_available(source_name)` macro uses `adapter.get_relation()` to check
+whether a bronze table physically exists in the datastore at dbt compile time:
 
-### Monitoring
+```sql
+{% macro is_source_available(source_name) %}
+  {%- set relation = adapter.get_relation(
+    database=source('bronze', source_name).database,
+    schema=source('bronze', source_name).schema,
+    identifier=source('bronze', source_name).identifier
+  ) -%}
+  {{ return(relation is not none) }}
+{% endmacro %}
+```
 
-- dlt exposes pipeline metrics (rows loaded, duration, errors) scrapeable by Prometheus
-- The worker logs pipeline and dbt run results at INFO level
+Models declare `enabled=is_source_available('llm_traces')` in their config block.
+On a fresh datastore, all models are disabled until the first pipeline run populates
+the bronze table. On subsequent dbt runs (triggered after each successful pipeline
+load), the models enable themselves automatically.
+
+`sources.yml` is the source of truth for which bronze tables exist and what their
+physical identifiers are.
 
 ## Architecture Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| **ELT** | dlt + dbt | Handles extraction, schema evolution, incremental loading, datastore destination |
-| **Repository** | SQLAlchemy Core | Backend-agnostic read path; mockable in tests |
-| **API** | Direct repository queries, no service layer | Queries are simple enough that a service layer adds no value |
-| **Source degradation** | `is_source_available()` dbt macro | Silver/Gold views work with any subset of sources present |
+| **ELT** | dlt + dbt | Handles extraction, schema evolution, incremental loading, destination management |
+| **dbt trigger** | After each successful pipeline run | Keeps views fresh without a separate scheduling mechanism |
+| **Source availability** | `adapter.get_relation()` in dbt macro | dbt queries live DB state |
+| **Multiple pipelines** | Langfuse + ??? | Architecture supports multiple concurrent asyncio pipelines; additional sources added by registering new pipeline factories in `worker.py` |
