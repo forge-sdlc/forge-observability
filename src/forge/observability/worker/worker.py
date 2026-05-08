@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import signal
 from collections.abc import Callable
 from pathlib import Path
 
@@ -47,6 +48,7 @@ def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
 
     s = get_settings()
 
+    # Build credentials manually — dlt's auto-detection doesn't pick up Pydantic settings.
     creds = ClickHouseCredentials()
     creds.host = s.clickhouse_host
     creds.port = s.clickhouse_port
@@ -69,6 +71,8 @@ def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
 
 # TODO: Configure for different LLM observability tools
 def _make_langfuse_source():
+    """Build a Langfuse dlt source from the active settings."""
+    # Deferred import: avoids loading langfuse deps when the source isn't configured.
     from forge.observability.worker.pipelines.langfuse_pipeline import langfuse_source
 
     s = get_settings()
@@ -84,7 +88,31 @@ def _make_langfuse_source():
 # ── Execution ───────────────────────────────────────────────────────────────
 
 
+def _run_dlt(pipeline, source):
+    """Synchronous thread target: call pipeline.run(source) with SIGINT blocked.
+
+    Mirrors _run_dbt — both are the sync, SIGINT-shielded functions handed to
+    asyncio.to_thread so that Ctrl+C can't interrupt an in-flight dlt load.
+    Signal masks are inherited across fork/exec, so any subprocess spawned by
+    the pipeline also has SIGINT blocked.
+    """
+    import signal as _signal
+
+    _signal.pthread_sigmask(_signal.SIG_BLOCK, [_signal.SIGINT])
+    try:
+        return pipeline.run(source)
+    finally:
+        _signal.pthread_sigmask(_signal.SIG_UNBLOCK, [_signal.SIGINT])
+
+
 async def _run_pipeline(name: str, source_factory: Callable) -> None:
+    """Async coordinator: build the pipeline, manage the dataset-init mutex, then
+    dispatch the actual dlt load to a worker thread via _run_dlt.
+
+    The dataset-init lock exists because dlt uses CREATE TABLE (not IF NOT EXISTS)
+    for its sentinel table — without serialization, concurrent pipelines on a fresh
+    datastore race to create it and one will fail.
+    """
     global _dataset_initialized, _dataset_init_lock
     pipeline = _build_pipeline(name)
     source = source_factory()
@@ -97,35 +125,78 @@ async def _run_pipeline(name: str, source_factory: Callable) -> None:
         async with _dataset_init_lock:
             if not _dataset_initialized:
                 # This pipeline is first — it initializes the shared dlt dataset.
-                load_info = await asyncio.to_thread(pipeline.run, source)
+                load_info = await asyncio.to_thread(_run_dlt, pipeline, source)
                 _dataset_initialized = True
                 logger.info(f"Pipeline {name} complete: {load_info}")
                 return
         # Another pipeline already initialized the dataset; fall through to a
         # normal run which will find the sentinel table already present.
 
-    load_info = await asyncio.to_thread(pipeline.run, source)
+    load_info = await asyncio.to_thread(_run_dlt, pipeline, source)
     logger.info(f"Pipeline {name} complete: {load_info}")
 
 
+async def _sleep_or_shutdown(seconds: int, shutdown_event: asyncio.Event | None) -> bool:
+    """Sleep for `seconds`. Returns True if the interval elapsed, False if shutdown was requested."""
+    if shutdown_event is None:
+        await asyncio.sleep(seconds)
+        return True
+
+    try:
+        # Race the event against the timeout: returns normally if shutdown fires first,
+        # raises TimeoutError if the full interval elapses without a shutdown signal.
+        await asyncio.wait_for(shutdown_event.wait(), timeout=seconds)
+        return False
+    except TimeoutError:
+        return True
+
+
 async def _run_pipeline_loop(
-    name: str, source_factory: Callable, interval: int, skip_dbt: bool = False
+    name: str,
+    source_factory: Callable,
+    interval: int,
+    skip_dbt: bool = False,
+    shutdown_event: asyncio.Event | None = None,
 ) -> None:
+    """Run a pipeline on a repeating interval, with graceful shutdown support.
+
+    Each iteration has three phases:
+      1. dlt pipeline run — extract + load bronze tables.
+      2. dbt run (optional) — rebuild silver/gold views from bronze.
+      3. Inter-run sleep — wait `interval` seconds before the next iteration.
+
+    After each phase completes, the shutdown event is checked. If set, the loop
+    returns without starting the next phase, allowing any in-flight work to finish
+    before the process exits.
+    """
     while True:
+        # Phase 1: run the dlt pipeline. On failure, sleep then retry.
         try:
             await _run_pipeline(name, source_factory)
         except Exception:
             logger.exception(f"Pipeline {name} failed — retrying after {interval}s")
-            await asyncio.sleep(interval)
+            if not await _sleep_or_shutdown(interval, shutdown_event):
+                return
             continue
 
+        # Exit before dbt if shutdown was requested while the pipeline was running.
+        if shutdown_event and shutdown_event.is_set():
+            return
+
+        # Phase 2: rebuild dbt views. Errors are logged but don't stop the loop.
         if not skip_dbt:
             try:
                 await asyncio.to_thread(_run_dbt)
             except Exception:
                 logger.exception("dbt run failed")
 
-        await asyncio.sleep(interval)
+        # Exit before sleeping if shutdown was requested while dbt was running.
+        if shutdown_event and shutdown_event.is_set():
+            return
+
+        # Phase 3: sleep until the next run, waking early if shutdown is requested.
+        if not await _sleep_or_shutdown(interval, shutdown_event):
+            return
 
 
 def _get_available_sources() -> list[str]:
@@ -151,16 +222,24 @@ def _get_available_sources() -> list[str]:
 
 
 def _run_dbt() -> None:
-    """Rebuild views via dbt after a successful pipeline run."""
-    # TODO: Configure different backends
-    s = get_settings()
-    available = _get_available_sources()
-    logger.info(f"Running dbt — available sources: {available}")
-    dbt_pipeline = _build_pipeline("dbt", dataset_name=s.clickhouse_database)
-    dbt = dlt.dbt.package(dbt_pipeline, str(_DBT_PROJECT))
-    models = dbt.run_all(additional_vars={"available_sources": available})
-    for m in models:
-        logger.info(f"dbt {m.model_name}: {m.status} ({m.time})")
+    """Rebuild silver/gold views via dbt after a successful pipeline run."""
+    import signal as _signal
+
+    # Block SIGINT in this thread before dlt spawns the dbt subprocess.
+    # Signal masks are inherited across fork/exec, so the dbt subprocess also
+    # has SIGINT blocked — Ctrl+C from the terminal won't kill it mid-run.
+    _signal.pthread_sigmask(_signal.SIG_BLOCK, [_signal.SIGINT])
+    try:
+        s = get_settings()
+        available = _get_available_sources()
+        logger.info(f"Running dbt — available sources: {available}")
+        dbt_pipeline = _build_pipeline("dbt", dataset_name=s.clickhouse_database)
+        dbt = dlt.dbt.package(dbt_pipeline, str(_DBT_PROJECT))
+        models = dbt.run_all(additional_vars={"available_sources": available})
+        for m in models:
+            logger.info(f"dbt {m.model_name}: {m.status} ({m.time})")
+    finally:
+        _signal.pthread_sigmask(_signal.SIG_UNBLOCK, [_signal.SIGINT])
 
 
 async def run_pipelines(once: bool = False, skip_dbt: bool = False) -> None:
@@ -173,6 +252,7 @@ async def run_pipelines(once: bool = False, skip_dbt: bool = False) -> None:
     s = get_settings()
     pipelines: list[tuple[str, Callable, int]] = []
 
+    # Register each enabled source as a (name, factory, interval) tuple.
     if s.langfuse_enabled:
         pipelines.append(("langfuse", _make_langfuse_source, s.langfuse_interval_seconds))
     else:
@@ -182,17 +262,45 @@ async def run_pipelines(once: bool = False, skip_dbt: bool = False) -> None:
         logger.error("No pipelines configured — nothing to run")
         return
 
-    if once:
-        await asyncio.gather(*[_run_pipeline(name, factory) for name, factory, _ in pipelines])
-        if not skip_dbt:
-            await asyncio.to_thread(_run_dbt)
+    # Graceful shutdown for both once and continuous modes: replace asyncio's
+    # default SIGINT/SIGTERM handler (which cancels tasks immediately) with a
+    # cooperative flag that lets in-flight work finish before exiting.
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def _request_shutdown() -> None:
+        # Idempotent: only log and set the event on the first signal.
+        if not shutdown_event.is_set():
+            logger.info("Shutdown requested — waiting for active pipelines to finish")
+            shutdown_event.set()
+
+    loop.add_signal_handler(signal.SIGINT, _request_shutdown)
+    loop.add_signal_handler(signal.SIGTERM, _request_shutdown)
+
+    try:
+        if once:
+            # One-shot mode: run all pipelines concurrently, rebuild views, then exit.
+            await asyncio.gather(*[_run_pipeline(name, factory) for name, factory, _ in pipelines])
+            # Don't start dbt if shutdown was requested while pipelines were running.
+            if not shutdown_event.is_set():
+                if not skip_dbt:
+                    await asyncio.to_thread(_run_dbt)
+                else:
+                    logger.info("Skipping dbt run (--skip-dbt)")
         else:
-            logger.info("Skipping dbt run (--skip-dbt)")
-    else:
-        if skip_dbt:
-            logger.info("Skipping dbt runs (--skip-dbt)")
-        tasks = [
-            _run_pipeline_loop(name, factory, interval, skip_dbt=skip_dbt)
-            for name, factory, interval in pipelines
-        ]
-        await asyncio.gather(*tasks)
+            if skip_dbt:
+                logger.info("Skipping dbt runs (--skip-dbt)")
+            tasks = [
+                _run_pipeline_loop(
+                    name, factory, interval, skip_dbt=skip_dbt, shutdown_event=shutdown_event
+                )
+                for name, factory, interval in pipelines
+            ]
+            # gather runs all pipeline loops concurrently; returns when every loop exits.
+            await asyncio.gather(*tasks)
+    finally:
+        # Restore default signal handling regardless of how the gather exits.
+        loop.remove_signal_handler(signal.SIGINT)
+        loop.remove_signal_handler(signal.SIGTERM)
+
+    logger.info("All pipelines stopped — worker exiting")
