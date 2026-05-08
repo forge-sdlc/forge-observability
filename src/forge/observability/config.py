@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     langfuse_port: int = Field(default=3000)
     langfuse_public_key: str = Field(default="")
     langfuse_secret_key: SecretStr = Field(default=SecretStr(""))
+    langfuse_page_size: int = Field(default=50)
+    langfuse_collection_lag_seconds: int = Field(default=1800)
 
     # ── Pipeline intervals ────────────────────────────────────────────────
     langfuse_interval_seconds: int = Field(

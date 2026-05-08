@@ -65,3 +65,17 @@ def test_get_settings_returns_same_instance():
     s2 = get_settings()
     assert s1 is s2
     get_settings.cache_clear()
+
+
+def test_langfuse_collection_defaults():
+    s = Settings()
+    assert s.langfuse_page_size == 50
+    assert s.langfuse_collection_lag_seconds == 1800
+
+
+def test_langfuse_collection_env_override(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_PAGE_SIZE", "100")
+    monkeypatch.setenv("LANGFUSE_COLLECTION_LAG_SECONDS", "300")
+    s = Settings(_env_file=None)
+    assert s.langfuse_page_size == 100
+    assert s.langfuse_collection_lag_seconds == 300

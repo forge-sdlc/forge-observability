@@ -1,6 +1,6 @@
 """Tests for forge.observability.cli."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from forge.observability.cli import main
 
@@ -22,7 +22,7 @@ def test_worker_default_flags(monkeypatch):
     monkeypatch.setattr("sys.argv", ["forge-observability", "worker"])
     with (
         patch("asyncio.run") as mock_asyncio_run,
-        patch("forge.observability.worker.run_pipelines", new_callable=AsyncMock) as mock_run,
+        patch("forge.observability.worker.run_pipelines", new_callable=MagicMock) as mock_run,
         patch("forge.observability.config.get_settings", return_value=_mock_settings()),
     ):
         result = main()
@@ -36,7 +36,7 @@ def test_worker_once_flag(monkeypatch):
     monkeypatch.setattr("sys.argv", ["forge-observability", "worker", "--once"])
     with (
         patch("asyncio.run"),
-        patch("forge.observability.worker.run_pipelines", new_callable=AsyncMock) as mock_run,
+        patch("forge.observability.worker.run_pipelines", new_callable=MagicMock) as mock_run,
         patch("forge.observability.config.get_settings", return_value=_mock_settings()),
     ):
         result = main()
@@ -49,7 +49,7 @@ def test_worker_skip_dbt_flag(monkeypatch):
     monkeypatch.setattr("sys.argv", ["forge-observability", "worker", "--skip-dbt"])
     with (
         patch("asyncio.run"),
-        patch("forge.observability.worker.run_pipelines", new_callable=AsyncMock) as mock_run,
+        patch("forge.observability.worker.run_pipelines", new_callable=MagicMock) as mock_run,
         patch("forge.observability.config.get_settings", return_value=_mock_settings()),
     ):
         result = main()
@@ -62,7 +62,7 @@ def test_worker_skip_dbt_from_settings(monkeypatch):
     monkeypatch.setattr("sys.argv", ["forge-observability", "worker"])
     with (
         patch("asyncio.run"),
-        patch("forge.observability.worker.run_pipelines", new_callable=AsyncMock) as mock_run,
+        patch("forge.observability.worker.run_pipelines", new_callable=MagicMock) as mock_run,
         patch(
             "forge.observability.config.get_settings", return_value=_mock_settings(skip_dbt=True)
         ),
@@ -77,7 +77,7 @@ def test_worker_once_and_skip_dbt(monkeypatch):
     monkeypatch.setattr("sys.argv", ["forge-observability", "worker", "--once", "--skip-dbt"])
     with (
         patch("asyncio.run"),
-        patch("forge.observability.worker.run_pipelines", new_callable=AsyncMock) as mock_run,
+        patch("forge.observability.worker.run_pipelines", new_callable=MagicMock) as mock_run,
         patch("forge.observability.config.get_settings", return_value=_mock_settings()),
     ):
         result = main()

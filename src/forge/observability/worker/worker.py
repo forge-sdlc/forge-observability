@@ -76,6 +76,8 @@ def _make_langfuse_source():
         host=s.langfuse_url,
         public_key=s.langfuse_public_key,
         secret_key=s.langfuse_secret_key.get_secret_value(),
+        lag_seconds=s.langfuse_collection_lag_seconds,
+        page_size=s.langfuse_page_size,
     )
 
 
