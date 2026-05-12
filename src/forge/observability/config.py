@@ -5,9 +5,27 @@ No dependency on the forge package.
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ClickHouseConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="CLICKHOUSE_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    host: str = Field(default="localhost")
+    port: int = Field(default=9000, description="Native protocol port")
+    http_port: int = Field(default=8123, description="HTTP interface port")
+    database: str = Field(default="default")
+    user: str = Field(default="forge")
+    password: SecretStr = Field(default=SecretStr("forge"))
 
 
 class Settings(BaseSettings):
@@ -18,13 +36,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── ClickHouse analytical store ───────────────────────────────────────
-    clickhouse_host: str = Field(default="localhost")
-    clickhouse_port: int = Field(default=9000, description="Native protocol port")
-    clickhouse_http_port: int = Field(default=8123, description="HTTP interface port")
-    clickhouse_database: str = Field(default="default")
-    clickhouse_user: str = Field(default="forge")
-    clickhouse_password: SecretStr = Field(default=SecretStr("forge"))
+    # ── Datastore backend ─────────────────────────────────────────────────
+    forge_observability_backend: Literal["clickhouse"] = "clickhouse"
 
     # ── Forge Observability Worker ────────────────────────────────────────
     forge_observability_worker_log_level: str = Field(default="INFO")
@@ -44,6 +57,13 @@ class Settings(BaseSettings):
     )
 
     # ── Computed helpers ──────────────────────────────────────────────────
+
+    @property
+    def backend_config(self) -> ClickHouseConfig:
+        # Duplicate pattern in comment to show intent for additional backends
+        # if self.forge_observability_backend == "clickhouse":
+        #     return ClickHouseConfig()
+        return ClickHouseConfig()
 
     @property
     def langfuse_url(self) -> str:

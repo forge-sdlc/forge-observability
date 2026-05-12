@@ -8,10 +8,13 @@ import pytest
 
 import forge.observability.worker.worker as worker_mod
 from forge.observability.worker.worker import (
+    _get_available_sources,
+    _resolve_destination,
     _run_dbt,
     _run_dlt,
     _run_pipeline_loop,
     _sleep_or_shutdown,
+    _table_exists,
     run_pipelines,
 )
 
@@ -28,19 +31,91 @@ def reset_dataset_state():
 
 @pytest.fixture
 def mock_settings():
+    from forge.observability.config import ClickHouseConfig
+
     s = MagicMock()
     s.langfuse_enabled = True
     s.langfuse_interval_seconds = 60
     s.langfuse_url = "http://localhost:3000"
     s.langfuse_public_key = "pk-test"
     s.langfuse_secret_key.get_secret_value.return_value = "sk-test"
-    s.clickhouse_host = "localhost"
-    s.clickhouse_port = 9000
-    s.clickhouse_http_port = 8123
-    s.clickhouse_database = "default"
-    s.clickhouse_user = "forge"
-    s.clickhouse_password.get_secret_value.return_value = "forge"
+    s.backend_config = ClickHouseConfig()
     return s
+
+
+# ── _resolve_destination ─────────────────────────────────────────────────────
+
+
+def test_resolve_destination_clickhouse_returns_destination():
+    from forge.observability.config import ClickHouseConfig
+
+    cfg = ClickHouseConfig()
+    with (
+        patch("dlt.destinations.impl.clickhouse.configuration.ClickHouseCredentials"),
+        patch("dlt.destinations.clickhouse") as mock_dest,
+    ):
+        _resolve_destination(cfg)
+    mock_dest.assert_called_once()
+
+
+def test_resolve_destination_unsupported_raises():
+    with pytest.raises(ValueError, match="Unsupported backend config"):
+        _resolve_destination(object())
+
+
+# ── _table_exists ─────────────────────────────────────────────────────────────
+
+
+def test_table_exists_clickhouse_true():
+    from forge.observability.config import ClickHouseConfig
+
+    cfg = ClickHouseConfig()
+    mock_client = MagicMock()
+    with patch("clickhouse_connect.get_client", return_value=mock_client):
+        assert _table_exists(cfg, "bronze___llm_traces") is True
+    mock_client.query.assert_called_once()
+
+
+def test_table_exists_clickhouse_false():
+    from forge.observability.config import ClickHouseConfig
+
+    cfg = ClickHouseConfig()
+    mock_client = MagicMock()
+    mock_client.query.side_effect = Exception("table not found")
+    with patch("clickhouse_connect.get_client", return_value=mock_client):
+        assert _table_exists(cfg, "missing_table") is False
+
+
+def test_table_exists_unsupported_raises():
+    with pytest.raises(ValueError, match="Unsupported backend config"):
+        _table_exists(object(), "some_table")
+
+
+# ── _get_available_sources ────────────────────────────────────────────────────
+
+
+def test_get_available_sources_includes_existing_tables(mock_settings):
+    first_source = next(iter(worker_mod._BRONZE_TABLES))
+    # Return True only for the first table, False for the rest.
+    returns = [True] + [False] * (len(worker_mod._BRONZE_TABLES) - 1)
+
+    with (
+        patch("forge.observability.worker.worker.get_settings", return_value=mock_settings),
+        patch("forge.observability.worker.worker._table_exists", side_effect=returns),
+    ):
+        result = _get_available_sources()
+
+    assert result == [first_source]
+
+
+def test_get_available_sources_empty_when_no_tables(mock_settings):
+    with (
+        patch("forge.observability.worker.worker.get_settings", return_value=mock_settings),
+        patch("forge.observability.worker.worker._table_exists", return_value=False),
+    ):
+        result = _get_available_sources()
+
+    assert result == []
 
 
 # ── run_pipelines ────────────────────────────────────────────────────────────

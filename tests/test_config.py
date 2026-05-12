@@ -2,7 +2,7 @@
 
 from pydantic import SecretStr
 
-from forge.observability.config import Settings, get_settings
+from forge.observability.config import ClickHouseConfig, Settings, get_settings
 
 
 def test_langfuse_url():
@@ -36,15 +36,15 @@ def test_langfuse_enabled_no_credentials():
 
 
 def test_clickhouse_password_is_secret():
-    s = Settings(clickhouse_password=SecretStr("hunter2"))
-    assert s.clickhouse_password.get_secret_value() == "hunter2"
-    assert "hunter2" not in repr(s)
+    cfg = ClickHouseConfig(password=SecretStr("hunter2"))
+    assert cfg.password.get_secret_value() == "hunter2"
+    assert "hunter2" not in repr(cfg)
 
 
 def test_env_var_overrides_clickhouse_host(monkeypatch):
     monkeypatch.setenv("CLICKHOUSE_HOST", "ch.internal")
-    s = Settings()
-    assert s.clickhouse_host == "ch.internal"
+    cfg = ClickHouseConfig()
+    assert cfg.host == "ch.internal"
 
 
 def test_env_var_overrides_langfuse_port(monkeypatch):
@@ -57,6 +57,11 @@ def test_env_var_skip_dbt(monkeypatch):
     monkeypatch.setenv("FORGE_OBSERVABILITY_WORKER_SKIP_DBT", "true")
     s = Settings()
     assert s.forge_observability_worker_skip_dbt is True
+
+
+def test_backend_config_defaults_to_clickhouse():
+    s = Settings()
+    assert isinstance(s.backend_config, ClickHouseConfig)
 
 
 def test_get_settings_returns_same_instance():

@@ -1,7 +1,7 @@
 forge_observability:
-  target: dev
+  target: "{{ env_var('FORGE_OBSERVABILITY_BACKEND', 'clickhouse') }}"
   outputs:
-    dev:
+    clickhouse:
       type: clickhouse
       host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
       port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | int }}"

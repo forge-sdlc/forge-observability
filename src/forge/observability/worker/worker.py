@@ -4,12 +4,13 @@ import asyncio
 import logging
 import signal
 from collections.abc import Callable
+from functools import singledispatch
 from pathlib import Path
 
 import dlt
 import yaml
 
-from forge.observability.config import get_settings
+from forge.observability.config import ClickHouseConfig, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def _load_bronze_tables() -> dict[str, str]:
     }
 
 
-# Maps dbt source name → ClickHouse bronze table name, derived from sources.yml.
+# Maps dbt source name → bronze table identifier, derived from sources.yml.
 _BRONZE_TABLES: dict[str, str] = _load_bronze_tables()
 
 # dlt uses CREATE TABLE (not IF NOT EXISTS) for the bronze dataset sentinel table.
@@ -41,26 +42,60 @@ _dataset_initialized = False
 _dataset_init_lock: asyncio.Lock | None = None
 
 
-def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
-    """Create a dlt pipeline targeting the configured datastore."""
-    # TODO: Configure for different backends
+# ── Backend dispatch ─────────────────────────────────────────────────────────
+# To add a new backend: register _resolve_destination and _table_exists for its config type.
+
+
+@singledispatch
+def _resolve_destination(cfg):
+    raise ValueError(f"Unsupported backend config: {type(cfg).__name__}")
+
+
+@_resolve_destination.register(ClickHouseConfig)
+def _resolve_destination_clickhouse(cfg: ClickHouseConfig):
+    # Build credentials manually — dlt's auto-detection doesn't pick up Pydantic settings.
     from dlt.destinations.impl.clickhouse.configuration import ClickHouseCredentials
 
-    s = get_settings()
-
-    # Build credentials manually — dlt's auto-detection doesn't pick up Pydantic settings.
     creds = ClickHouseCredentials()
-    creds.host = s.clickhouse_host
-    creds.port = s.clickhouse_port
-    creds.http_port = s.clickhouse_http_port
-    creds.database = s.clickhouse_database
-    creds.username = s.clickhouse_user
-    creds.password = s.clickhouse_password.get_secret_value()
+    creds.host = cfg.host
+    creds.port = cfg.port
+    creds.http_port = cfg.http_port
+    creds.database = cfg.database
+    creds.username = cfg.user
+    creds.password = cfg.password.get_secret_value()
     creds.secure = 0
+    return dlt.destinations.clickhouse(credentials=creds)
 
+
+@singledispatch
+def _table_exists(cfg, table_name: str) -> bool:
+    raise ValueError(f"Unsupported backend config: {type(cfg).__name__} (table: {table_name})")
+
+
+@_table_exists.register(ClickHouseConfig)
+def _table_exists_clickhouse(cfg: ClickHouseConfig, table_name: str) -> bool:
+    import clickhouse_connect
+
+    client = clickhouse_connect.get_client(
+        host=cfg.host,
+        port=cfg.http_port,
+        username=cfg.user,
+        password=cfg.password.get_secret_value(),
+        database=cfg.database,
+    )
+    try:
+        client.query(f"SELECT 1 FROM `{table_name}` LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+
+def _build_pipeline(name: str, dataset_name: str = "bronze") -> dlt.Pipeline:
+    """Create a dlt pipeline targeting the configured datastore."""
+    cfg = get_settings().backend_config
     return dlt.pipeline(
         pipeline_name=name,
-        destination=dlt.destinations.clickhouse(credentials=creds),
+        destination=_resolve_destination(cfg),
         dataset_name=dataset_name,
         pipelines_dir=_DLT_PIPELINES_DIR,
     )
@@ -201,24 +236,8 @@ async def _run_pipeline_loop(
 
 def _get_available_sources() -> list[str]:
     """Return source names whose bronze tables currently exist in the datastore."""
-    import clickhouse_connect
-
-    s = get_settings()
-    client = clickhouse_connect.get_client(
-        host=s.clickhouse_host,
-        port=s.clickhouse_http_port,
-        username=s.clickhouse_user,
-        password=s.clickhouse_password.get_secret_value(),
-        database=s.clickhouse_database,
-    )
-    available = []
-    for source_name, table_name in _BRONZE_TABLES.items():
-        try:
-            client.query(f"SELECT 1 FROM `{table_name}` LIMIT 1")
-            available.append(source_name)
-        except Exception:
-            pass
-    return available
+    cfg = get_settings().backend_config
+    return [name for name, table in _BRONZE_TABLES.items() if _table_exists(cfg, table)]
 
 
 def _run_dbt() -> None:
@@ -233,7 +252,7 @@ def _run_dbt() -> None:
         s = get_settings()
         available = _get_available_sources()
         logger.info(f"Running dbt — available sources: {available}")
-        dbt_pipeline = _build_pipeline("dbt", dataset_name=s.clickhouse_database)
+        dbt_pipeline = _build_pipeline("dbt", dataset_name=s.backend_config.database)
         dbt = dlt.dbt.package(dbt_pipeline, str(_DBT_PROJECT))
         models = dbt.run_all(additional_vars={"available_sources": available})
         for m in models:
