@@ -1,0 +1,17 @@
+name: forge_observability
+version: 0.1.0
+profile: forge_observability
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+target-path: "../../../../../../state/.dbt/target"
+log-path: "../../../../../../state/.dbt/logs"
+packages-install-path: "../../../../../../state/.dbt/dbt_packages"
+
+models:
+  forge_observability:
+    staging:
+      +materialized: view
+    silver:
+      +materialized: view
+

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+!.env.example
+
+# Testing
+.pytest_cache/
+.coverage
+
+# IDE
+.idea/
+.vscode/*
+*.swp
+
+# dlt
+state/.dlt/*
+!state/.dlt/config.toml
+
+# dbt
+state/.dbt/*
+!state/.dbt/profiles.yml
+
+# macOS
+.DS_Store
