@@ -84,3 +84,24 @@ def test_worker_once_and_skip_dbt(monkeypatch):
 
     assert result == 0
     mock_run.assert_called_once_with(once=True, skip_dbt=True)
+
+
+def test_worker_stray_keyboard_interrupt_exits_cleanly(monkeypatch):
+    """A KeyboardInterrupt escaping asyncio.run() (e.g. after signal handlers are
+    removed) is caught and the CLI exits with code 0 rather than crashing."""
+    monkeypatch.setattr("sys.argv", ["forge-observability", "worker"])
+
+    def raise_ki(coro):
+        # Close the coroutine properly before raising so Python doesn't warn
+        # about an unawaited coroutine.
+        if hasattr(coro, "close"):
+            coro.close()
+        raise KeyboardInterrupt
+
+    with (
+        patch("asyncio.run", side_effect=raise_ki),
+        patch("forge.observability.config.get_settings", return_value=_mock_settings()),
+    ):
+        result = main()
+
+    assert result == 0

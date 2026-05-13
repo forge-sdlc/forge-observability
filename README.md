@@ -157,8 +157,6 @@ export DBT_PROFILES_DIR=state/.dbt
 export DBT_PROJECT_DIR=src/forge/observability/worker/pipelines/dbt
 ```
 
-VSCode users: `.vscode/settings.json` wires these up automatically for the integrated terminal and the dbt Power User extension.
-
 ```bash
 dbt deps      # install packages → state/.dbt/dbt_packages/
 dbt debug     # verify connectivity

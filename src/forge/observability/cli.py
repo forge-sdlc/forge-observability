@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import sys
 
@@ -46,7 +47,11 @@ def main() -> int:
 
     s = get_settings()
     skip_dbt = args.skip_dbt or s.forge_observability_worker_skip_dbt
-    asyncio.run(run_pipelines(once=args.once, skip_dbt=skip_dbt))
+    # A signal can arrive in the narrow window after run_pipelines removes its
+    # signal handlers but before asyncio.run() fully returns. The work has
+    # already finished at this point; suppress the stray interrupt.
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(run_pipelines(once=args.once, skip_dbt=skip_dbt))
     return 0
 
 
