@@ -5,7 +5,7 @@ datasources:
     type: forge-langfuse-datasource
     uid: langfuse
     url: "http://${LANGFUSE_HOST}:${LANGFUSE_PORT}"
-    editable: false
+    editable: true
     basicAuth: true
     basicAuthUser: "${LANGFUSE_PUBLIC_KEY}"
     secureJsonData:
