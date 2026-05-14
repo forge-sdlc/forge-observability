@@ -17,8 +17,11 @@ The observability system splits into two independent concerns with a clear bound
 │  Prometheus ─────────────────────────────────► Grafana              │
 │    (metrics + exemplars with trace_id)            ↑                 │
 │                                                   │                 │
-│  Langfuse ClickHouse (self-hosted, with MVs) ─────┘                 │
+│  Langfuse API ── Grafana data source plugin ──────┘  (preferred)    │
 │    (LLM traces, agent observations)               │                 │
+│                                                   │                 │
+│  Langfuse ClickHouse (self-hosted) ───────────────┘  (alternative)  │
+│    direct connection or with MVs where needed     │                 │
 │                                                   │                 │
 │  FastMCP server ──────────────────────────────────┘                 │
 │    query_langfuse_traces / query_prometheus_metrics                  │
@@ -41,11 +44,19 @@ The observability system splits into two independent concerns with a clear bound
 
 ## Part 1: System Observability
 
-### Decision: Prometheus + Langfuse ClickHouse as dual Grafana data sources
+### Decision: Prometheus + Langfuse as dual Grafana data sources (no ETL pipeline)
 
-Grafana connects directly to both Prometheus and Langfuse's ClickHouse instance. The medallion/analytical logic lives in Grafana and (later) in the MCP API, not in an external ETL pipeline for this use case.
+The analytical logic lives in Grafana and (later) in the MCP API, not in an external ETL pipeline. No second ClickHouse instance or dlt/dbt stack is introduced.
 
-**Rationale**: Querying Langfuse's ClickHouse directly is viable because ClickHouse is an OLAP columnar store built for analytical queries under concurrent load. For the current scale (≤150 projects), a second ETL pipeline adds infrastructure overhead without meaningful performance benefit.
+**Preferred: Grafana data source plugin for Langfuse**
+
+A Grafana data source plugin wrapping the Langfuse HTTP API is the preferred integration path. This provides a stable interface against Langfuse's versioned API rather than its internal schema, fits naturally into Grafana's plugin ecosystem, and adds exactly one small component with a clear, bounded job.
+
+**Alternative: Direct ClickHouse connection**
+
+If a suitable Grafana plugin is unavailable or insufficient, Grafana connects directly to Langfuse's ClickHouse instance. ClickHouse is an OLAP columnar store built for analytical queries under concurrent load, so direct querying is fully viable. The current silver models are simple aggregations that Grafana can run as-is — no pre-materialization is required. ClickHouse Materialized Views may be introduced selectively if a specific query proves too slow for direct execution, but should not be added by default.
+
+**Rationale**: For the current scale (≤150 projects) and query complexity (simple aggregations from a single source), a separate ETL pipeline adds operational overhead without providing anything that either integration path above cannot deliver.
 
 ### Prometheus: Metrics and Recording Rules
 
@@ -85,25 +96,22 @@ In Grafana, this renders as diamond markers on the time series graph. Clicking a
 
 `trace_id` is the join key between Prometheus and Langfuse data. This is the primary cross-reference mechanism, not a foreign-key relationship in a shared database.
 
-### Langfuse ClickHouse: Materialized Views
+### Langfuse ClickHouse: Direct Queries and Optional MVs
 
-Langfuse is **self-hosted** — we control the ClickHouse instance. This makes MVs fully feasible without any additional infrastructure.
+Langfuse is **self-hosted** — we control the ClickHouse instance. Direct analytical queries against the Langfuse ClickHouse are viable when not using a Grafana data source plugin.
 
-To avoid coupling Grafana dashboards to Langfuse's internal schema and to make analytical queries faster, **ClickHouse Materialized Views (MVs)** are created within the existing Langfuse ClickHouse instance.
+The current analytical requirements (simple aggregations grouped by stage or ticket) do not require pre-materialization. Grafana can execute these as ad-hoc queries against the Langfuse tables directly.
 
-MVs fire on insert into the Langfuse `observations` table, aggregating relevant fields into a custom table owned by forge-observability:
+**ClickHouse Materialized Views** may be introduced selectively inside the existing Langfuse ClickHouse instance if a specific query proves too slow for direct execution — for example, a heavy aggregation over a large observations table. When needed, MVs fire on insert into the source table and write pre-aggregated results into a `forge`-namespaced target table:
 
 | Table | Purpose |
 |-------|---------|
 | `langfuse.observations` | Langfuse-managed raw data (source of truth) |
-| `forge.agent_performance_rollup` | MV target: pre-aggregated by `project_id`, `workflow_stage`, `latency`, `token_count` |
+| `forge.agent_performance_rollup` | MV target: pre-aggregated by `project_id`, `workflow_stage`, `latency`, `token_count` — only if direct queries are too slow |
 
-**Benefits**:
-- Zero additional infrastructure (runs inside the existing ClickHouse instance)
-- Grafana queries the small pre-aggregated table, not raw trace scans
-- Because both tables share the same DB, `JOIN` back to raw traces by `trace_id` remains available for drill-down
+MVs should not be introduced by default. Add them only when there is a measured performance reason.
 
-**Risk**: If the Langfuse schema changes, the MV definition may need updating. This is acceptable given that querying raw tables directly has the same risk.
+**Risk**: If the Langfuse schema changes, both direct queries and MV definitions may need updating. This is acceptable for a self-hosted deployment where the version is controlled.
 
 ### Grafana: Deep Links to Langfuse Traces
 
@@ -214,10 +222,11 @@ All interpretation happens in skills, not in the server. The server is intention
 |--------|-------------|
 | Prometheus instrumentation | Emit counters/histograms with `workflow` and `stage` labels from the worker or via Forge push |
 | Exemplar injection | Attach `trace_id` to metric increments when a Langfuse trace is active |
-| ClickHouse MV definitions | Create and maintain `forge.agent_performance_rollup` MV on the Langfuse ClickHouse instance |
-| Grafana provisioning | Dashboard definitions with Prometheus + ClickHouse data sources, exemplar click-through, and Langfuse deep links |
+| Grafana data source plugin | Plugin wrapping the Langfuse HTTP API (preferred); direct ClickHouse connection as fallback |
+| Grafana provisioning | Dashboard definitions with Prometheus + Langfuse data sources, exemplar click-through, and Langfuse deep links |
 | Prometheus Recording Rules | Ship rule definitions alongside the worker for deployment |
-| FastMCP server | `query_langfuse_traces` and `query_prometheus_metrics` tools backed by ClickHouse MVs and Prometheus respectively |
+| ClickHouse MVs (optional) | Add `forge.agent_performance_rollup` inside the Langfuse ClickHouse only if direct queries prove too slow |
+| FastMCP server | `query_langfuse_traces` and `query_prometheus_metrics` tools backed by the Langfuse API/ClickHouse and Prometheus respectively |
 | `observability:generate-report` skill | Fetches traces + metrics for a run/time window and produces structured performance report |
 | `observability:improve-skills` skill | Reads report + team skill files, proposes diffs one-at-a-time, applies user-approved changes to the skill repo |
 
