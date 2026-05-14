@@ -33,7 +33,7 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
     volumes:
-      - ${LANGFUSE_PLUGIN_DIST:-../grafana-langfuse-datasource/dist}:/var/lib/grafana/plugins/forge-langfuse-datasource:ro,z
+      - ${LANGFUSE_PLUGIN_DIST:-../../grafana-langfuse-datasource/dist}:/var/lib/grafana/plugins/forge-langfuse-datasource:ro,z
       - ./provisioning:/etc/grafana/provisioning:ro,z
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
