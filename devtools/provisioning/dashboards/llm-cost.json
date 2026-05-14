@@ -1,0 +1,91 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "trace_cost",
+          "refId": "A"
+        }
+      ],
+      "title": "Trace Cost Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "color": { "mode": "thresholds" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "trace_cost",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Cost",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "observation_cost",
+          "refId": "A"
+        }
+      ],
+      "title": "Observation Cost Over Time",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["langfuse", "llm", "cost"],
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "LLM Cost Overview",
+  "uid": "llm-cost-overview",
+  "version": 1
+}

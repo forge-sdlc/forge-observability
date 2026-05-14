@@ -1,0 +1,188 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "usageDetails.input",
+          "aggregation": "sum",
+          "refId": "Input"
+        },
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "usageDetails.output",
+          "aggregation": "sum",
+          "refId": "Output"
+        }
+      ],
+      "title": "Input vs Output Tokens Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "usageDetails.total",
+          "aggregation": "sum",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Tokens Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "totalCost",
+          "aggregation": "avg",
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Observation Cost Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 16 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "usageDetails.input",
+          "aggregation": "sum",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Input Tokens",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 16 },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "usageDetails.output",
+          "aggregation": "sum",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Output Tokens",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 16 },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "observations",
+          "field": "usageDetails.total",
+          "aggregation": "sum",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Tokens",
+      "type": "stat"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["langfuse", "llm", "tokens"],
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "LLM Token Breakdown",
+  "uid": "llm-token-breakdown",
+  "version": 1
+}
