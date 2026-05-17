@@ -1,0 +1,42 @@
+# Grafana with Langfuse data source plugin
+#
+# Prerequisites:
+#   1. Build the plugin in the grafana-langfuse-datasource repo:
+#        cd ../grafana-langfuse-datasource && npm run build
+#   2. Copy .env.example to .env in this repo and fill in values
+#
+# Start:
+#   podman compose --env-file .env -f devtools/compose.grafana.yml up -d
+#
+# Grafana UI: http://localhost:3001  (admin / admin)
+#
+# Tear down:
+#   podman compose -f devtools/compose.grafana.yml down
+#
+# LANGFUSE_PLUGIN_DIST controls where the built plugin dist/ lives.
+# Default assumes grafana-langfuse-datasource is a sibling of this repo.
+
+name: forge-observability-grafana
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: forge-langfuse-datasource
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-host.containers.internal}
+      LANGFUSE_PORT: ${LANGFUSE_PORT:-3000}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+    volumes:
+      - ${LANGFUSE_PLUGIN_DIST:-../../grafana-langfuse-datasource/dist}:/var/lib/grafana/plugins/forge-langfuse-datasource:ro,z
+      - ./provisioning:/etc/grafana/provisioning:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

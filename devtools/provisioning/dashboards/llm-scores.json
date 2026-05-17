@@ -1,0 +1,143 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0, "max": 1, "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "scores",
+          "field": "value",
+          "aggregation": "avg",
+          "refId": "A"
+        }
+      ],
+      "title": "Average Score Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["mean"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "scores",
+          "field": "value",
+          "aggregation": "avg",
+          "refId": "A"
+        }
+      ],
+      "title": "Mean Score",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 8 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "scores",
+          "field": "value",
+          "aggregation": "count",
+          "refId": "A"
+        }
+      ],
+      "title": "Score Events Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 8 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "forge-langfuse-datasource", "uid": "langfuse" },
+          "queryType": "custom",
+          "resource": "scores",
+          "field": "value",
+          "aggregation": "count",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Score Events",
+      "type": "stat"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["langfuse", "llm", "scores"],
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "LLM Scores",
+  "uid": "llm-scores",
+  "version": 1
+}
