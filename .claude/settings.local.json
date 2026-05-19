@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/devtools/langfuse/test_seed.py -q)",
+      "Bash(python3 -m pytest tests/devtools/langfuse/test_seed.py -q)",
+      "Bash(pip3 list *)",
+      "Bash(uv run *)",
+      "Bash(uv sync *)"
+    ]
+  }
+}

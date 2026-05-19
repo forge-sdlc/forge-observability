@@ -1,5 +1,5 @@
 # Python
-__pycache__/
+__pycache__
 *.py[cod]
 *.pyo
 .venv/
@@ -7,26 +7,23 @@ __pycache__/
 dist/
 build/
 
-# Environment
-.env
-!.env.example
-
 # Testing
 .pytest_cache/
 .coverage
+
+# environment
+.env
 
 # IDE
 .idea/
 .vscode/*
 *.swp
 
-# dlt
-state/.dlt/*
-!state/.dlt/config.toml
-
-# dbt
-state/.dbt/*
-!state/.dbt/profiles.yml
-
 # macOS
 .DS_Store
+
+# Claude
+.superpowers
+
+# Generated seed output (runtime artifact, not version controlled)
+seed_output.json
