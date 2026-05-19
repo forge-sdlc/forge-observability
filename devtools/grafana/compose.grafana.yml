@@ -1,0 +1,39 @@
+# Analytics — ephemeral Grafana for local development
+#
+# Usage:
+#   podman compose --env-file .env -f devtools/grafana/compose.grafana.yml up -d
+#
+# UI: http://localhost:{GRAFANA_PORT} (admin / grafana)
+#
+# Tear down (wipes all data):
+#   podman compose -f devtools/grafana/compose.grafana.yml down -v
+name: grafana
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=grafana
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource,redis-datasource
+      - CLICKHOUSE_HOST=host.containers.internal
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - PROMETHEUS_HOST=${PROMETHEUS_HOST}
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning
+      - ./dashboards:/var/lib/grafana/dashboards
+
+volumes:
+  grafana:
+    name: forge_observability_grafana

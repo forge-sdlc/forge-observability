@@ -1,47 +1,22 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "forge-observability"
 version = "0.1.0"
-description = "Analytics and observability plugin for Forge SDLC Orchestrator"
-readme = "README.md"
-requires-python = ">=3.11, <3.14"
+description = "Observability tooling for the forge SDLC platform"
+requires-python = ">=3.11"
 dependencies = [
-    # ClickHouse
-    "clickhouse-connect>=0.8.0",
-    "dlt[clickhouse]>=1.4.0",
-    # Source integrations
     "langfuse>=2.50.0",
-    # dbt for silver/gold layer transformations
-    "dbt-clickhouse>=1.8.0",
-    # Config
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
+    "faker>=20.0.0",
     "python-dotenv>=1.0.0",
+    "clickhouse-driver>=0.2.7",
+    "prometheus-client>=0.21.0",
+    "python-snappy>=0.7.3",
+    "redis>=5.0.0",
+    "requests>=2.31.0",
 ]
 
-[project.scripts]
-forge-observability = "forge.observability.cli:main"
-
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.4.0",
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/forge"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "ARG"]
-ignore = ["E501"]

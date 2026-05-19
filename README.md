@@ -1,167 +1,107 @@
 # forge-observability
 
-Analytics and observability worker for the [Forge SDLC Orchestrator](https://github.com/your-org/forge).
-
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+Observability tooling for the [Forge SDLC orchestrator](https://github.com/forge-sdlc/forge). Provides synthetic trace data, alert analytics, system metrics, and a Grafana dashboard suite for developing Forge's observability capabilities.
 
 ## Overview
 
-forge-observability ingests LLM observability data from Langfuse into a target datastore, then builds analytical views using dbt. It runs as a single background worker that handles data ingestion (via dlt) and view creation (via dbt) on a continuous schedule.
+Forge is an AI-powered SDLC orchestrator that processes JIRA tickets through a LangGraph workflow — from PRD generation through code review. Every workflow step produces LLM traces in Langfuse. This project:
 
-## Architecture
+1. **Seeds realistic data** — 150 tickets across 2 JIRA projects, producing ~1,400 Langfuse traces with a realistic LangGraph observation hierarchy, multi-model assignment (Claude Opus/Sonnet/Haiku + Gemini 2.5 Pro), and log-normal token/latency distributions to simulate anomalies. The seeder creates `seed_output.json` which is used to generate correlated data
+in both redis and prometheus.
 
-Data flows through a medallion structure:
+2. **Generates correlated alerts** — Outlier tickets get alert findings written to Redis as native Hashes and TimeSeries, queryable directly by Grafana.
 
-```
-Langfuse ──► Bronze (raw) ──► Silver (analytical tables) ──► (aggregations)
-```
+3. **Produces system metrics** — 1 day of Prometheus metrics (`forge_*` counters, histograms, gauges) at 15-second intervals with `project_id` and `workflow_step` labels for cross-datasource correlation.
 
-**Bronze** tables are loaded by **dlt** into the configured datastore using triple-underscore naming (`bronze___llm_traces`). **Staging** views are thin dbt SQL views that are used to prepare silver views. **Silver** views are analytical tableds built by dbt. dbt models enable themselves automatically once the corresponding bronze table exists in the datastore, using `adapter.get_relation()` to check at compile time.
-
-dlt runs the Langfuse pipeline on a configurable interval. After each successful run, dbt rebuilds the views.
+4. **Provides a dashboard suite** — Three interlinked Grafana dashboards (Engineering, Business, JIRA Issue Detail) that demonstrate forge observability end-to-end.
 
 ## Prerequisites
 
-- Python ≥ 3.11
-- [uv](https://docs.astral.sh/uv/)
-- Docker or Podman
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- [Podman](https://podman.io/) (or Docker) for the Grafana container
+- Running Forge infrastructure: Langfuse, Redis (redis-stack-server), Prometheus
 
-## Quick Start
+## Quickstart
 
 ```bash
-# Install
+# Clone and install
+git clone https://github.com/forge-sdlc/forge-observability
+cd forge-observability
+cp .env.example .env
+# Fill in LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY from your Langfuse project
 uv sync
 
-# Start external datastore
-# e.g., Clickhouse
-podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
+# Seed the observability stack
+# Langfuse seed must run first; the other seeders can run in any order
+# Seeders clean up previously written data before rewriting new seeds
+# If Langfuse is seeded a second time, the other seeders need to be run again
+uv run python -m devtools.langfuse.seed
+uv run python -m devtools.redis.seed
+uv run python -m devtools.prometheus.seed
 
-# Configure
-cp .env.example .env
-# Edit .env — set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY at minimum
-
-# Run pipelines once to backfill (also runs dbt to build views)
-forge-observability worker --once
-
-# Start the worker on a loop, fetching new data after a specified interval
-forge-observability worker
+# Start Grafana
+podman compose --env-file .env -f devtools/grafana/compose.grafana.yml up -d
+# Open http://localhost:3010 (admin / grafana)
 ```
 
-## Configuration
-
-All settings are read from environment variables or a `.env` file. See `.env.example` for a ready-to-copy template.
-
-### ClickHouse
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLICKHOUSE_HOST` | `localhost` | Server hostname |
-| `CLICKHOUSE_PORT` | `9000` | Native protocol port |
-| `CLICKHOUSE_HTTP_PORT` | `8123` | HTTP interface port |
-| `CLICKHOUSE_DATABASE` | `default` | Database name |
-| `CLICKHOUSE_USER` | `forge` | Username |
-| `CLICKHOUSE_PASSWORD` | `forge` | Password |
-
-### Worker
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FORGE_OBSERVABILITY_WORKER_LOG_LEVEL` | `INFO` | Log level |
-| `FORGE_OBSERVABILITY_WORKER_SKIP_DBT` | `false` | Skip dbt view rebuilds — useful when iterating on dbt models and invoking dbt directly via its CLI |
-
-### Langfuse *(disabled if credentials absent)*
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LANGFUSE_HOST` | `localhost` | Hostname |
-| `LANGFUSE_PORT` | `3000` | Port |
-| `LANGFUSE_PUBLIC_KEY` | `` | Public API key |
-| `LANGFUSE_SECRET_KEY` | `` | Secret API key |
-| `LANGFUSE_INTERVAL_SECONDS` | `60` | Pipeline polling interval |
-
-> When running inside containers, use `host.containers.internal` instead of `localhost` to reach services on the host machine.
-
-## Running with containers
-
-```bash
-# External datastore (run first)
-podman compose --env-file .env -f devtools/compose.clickhouse.yml up -d
-
-# Worker
-podman compose --env-file .env -f devtools/compose.dev.yml up -d
-
-# Tail logs
-podman compose --env-file .env -f devtools/compose.dev.yml logs -f
-```
-
-dlt and dbt state are persisted in a named volume (`forge_observability_worker_state`) mounted at `/app/state` inside the container.
-
-Tear down:
-
-```bash
-podman compose -f devtools/compose.clickhouse.yml down -v
-podman compose -f devtools/compose.dev.yml down -v
-```
-
-## CLI reference
-
-Usage: `forge-observability <command> [options]`
-
-`-v / --verbose` enables DEBUG-level logging.
-
-### `worker`
-
-Run all configured dlt pipelines, then rebuild views with dbt after each successful run.
+## Architecture
 
 ```
-forge-observability worker [--once] [--skip-dbt]
+    ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+    │  Langfuse   │ │    Redis    │ │ Prometheus  │
+    │  ~1,400     │ │  Alerts +   │ │  forge_*    │
+    │  traces     │ │  Statistics │ │  metrics    │
+    └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+           │               │               │
+           └───────────────┼───────────────┘
+                           ▼
+                  ┌─────────────────┐
+                  │     Grafana     │
+                  ├─────────────────┤
+                  │  Engineering    │◄─── Alerts, system health,
+                  │  Business       │     performance, models
+                  │  Issue Detail   │◄─── Per-issue drill-down
+                  └────────┬────────┘
+                           │
+                           ▼
+                     Langfuse UI
+                   (trace deep links)
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--once` | off | Run the pipeline once then exit (useful for backfill) |
-| `--skip-dbt` | off | Run source pipeline only — skip dbt silver rebuilds |
+### Dashboard suite
 
-Without `--once`, the pipeline loops on the configured `LANGFUSE_INTERVAL_SECONDS`.
+| Dashboard | Audience | Key panels |
+|-----------|----------|------------|
+| **Engineering** | Technical Engineers | Alert summary, system health + Prometheus correlation, cost/latency outlier detection, model efficiency, issues table |
+| **Business** | Business users | Total LLM cost, feature vs bug economics, cost trends + forecasting |
+| **Issue Detail** | Both | Per-issue KPIs, workflow step timeline, cost/token breakdown, trace table with Langfuse deep links |
 
-`--skip-dbt` is intended for local dbt development: keep the worker running so fresh bronze data continues to flow in, then invoke `dbt run` directly as you iterate on models.
+### Cross-datasource correlation
 
-## Data sources
+Dashboards correlate data across ClickHouse (Langfuse), Redis, and Prometheus using shared dimensions:
 
-| Source | Bronze tables | Level 
-|--------|--------------|------------|
-| **Langfuse** | `bronze___llm_traces` | Bronze |
-| **Langfuse** | `bronze___llm_observations` | Bronze |
-| **Langfuse** | `bronze___llm_scores` | Bronze |
+- **`project_id`** — First-class label on all data sources, cascading dashboard variable
+- **`workflow_step`** / `phase` — Maps Langfuse trace tags to Prometheus phase labels
+- **`ticket_type`** — `feature` or `bug`, present in all three stores
+- **`jira_issue`** / `session_id` — Per-issue join key between ClickHouse and Redis
 
 ## Development
 
 ```bash
-# Run tests
+# Run tests (95 unit tests, no live services needed)
+uv sync --dev
 uv run pytest
 
 # Lint and format
-uv run ruff check src/ tests/
-uv run ruff format src/ tests/
+uv run ruff check devtools/ tests/
+uv run ruff format devtools/ tests/
 ```
 
-### dbt
+See [`devtools/README.md`](devtools/README.md) for more seeder details and [`devtools/grafana/README.md`](devtools/grafana/README.md) for Grafana development workflow.
 
-The dbt project lives at `src/forge/observability/worker/pipelines/dbt/`. It builds staging and views from the bronze tables loaded by dlt. Artifacts are written to `state/.dbt/`.
+## Project documentation
 
-**DBT CLI** The dbt CLI does not load `.env` automatically. When using the it, source your `.env` file abd point dbt to the correct paths:
-
-```bash
-set -a && source .env && set +a
-export DBT_PROFILES_DIR=state/.dbt
-export DBT_PROJECT_DIR=src/forge/observability/worker/pipelines/dbt
-```
-
-```bash
-dbt deps      # install packages → state/.dbt/dbt_packages/
-dbt debug     # verify connectivity
-dbt run       # build all views
-dbt test      # run schema tests
-```
-
-The worker runs `dbt run` automatically after each successful pipeline execution. To iterate on dbt models while keeping bronze data flowing, start the worker with `--skip-dbt` and invoke `dbt run` directly.
+- [`docs/specs/`](docs/specs/) — Design specifications
+- [`docs/plans/`](docs/plans/) — Implementation plans
+- [`devtools/README.md`](devtools/README.md) — Seeder usage and configuration
+- [`devtools/grafana/README.md`](devtools/grafana/README.md) — Grafana setup and MCP integration
